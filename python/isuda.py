@@ -122,7 +122,7 @@ def get_index():
     entries = cur.fetchall()
     for entry in entries:
         entry['html'] = htmlify(entry['description'])
-        entry['stars'] = load_stars(entry['keyword'])
+        entry['stars'] = load_stars(entry['id'])
 
     cur.execute('SELECT COUNT(*) AS count FROM entry')
     row = cur.fetchone()
@@ -220,12 +220,20 @@ def get_keyword(keyword):
 
     cur = dbh().cursor()
     cur.execute('SELECT * FROM entry WHERE keyword = %s', (keyword,))
+    #cur.execute('''
+    #SELECT e.id,
+    #  e.keyword,
+    #  s.entry_id
+    #FROM entry as e
+    #  inner join star as s on e.id = s.entry_id
+    #WHERE keyword = %s;
+    #''', (keyword,))
     entry = cur.fetchone()
     if entry == None:
         abort(404)
 
     entry['html'] = htmlify(entry['description'])
-    entry['stars'] = load_stars(entry['keyword'])
+    entry['stars'] = load_stars(entry['id'])
     return render_template('keyword.html', entry = entry)
 
 @app.route('/keyword/<keyword>', methods=['POST'])
@@ -249,6 +257,38 @@ def delete_keyword(keyword):
     redis_re_keyword.set('re_keyword', re_keyword)
 
     return redirect('/')
+
+@app.route("/stars", methods=['POST'])
+def post_stars():
+    keyword = request.args.get('keyword', "")
+    if keyword == None or keyword == "":
+        keyword = request.form['keyword']
+
+    #origin = os.environ.get('ISUDA_ORIGIN', 'http://localhost:5000')
+    #url = "%s/keyword/%s" % (origin, urllib.parse.quote(keyword))
+    #try:
+    #    urllib.request.urlopen(url)
+    #except urllib.error.HTTPError as e:
+    #    if e.status == 404:
+    #        abort(404)
+    #    else:
+    #        raise
+
+    cur = dbh().cursor()
+
+    cur.execute('SELECT * FROM entry WHERE keyword = %s', (keyword,))
+    entry = cur.fetchone()
+    if entry == None:
+        abort(404)
+
+    user = request.args.get('user', "")
+    if user == None or user == "":
+        user = request.form['user']
+
+    cur.execute('INSERT INTO star (entry_id, user_name, created_at) VALUES (%s, %s, NOW())', (entry['id'], user))
+    #INSERT INTO star (entry_id, user_name, created_at) VALUES (1, abui, NOW())
+    return jsonify(result = 'ok')
+
 
 def htmlify(content):
     if content == None or content == '':
@@ -285,13 +325,17 @@ def htmlify(content):
 
     return re.sub(re.compile("\n"), "<br />", result)
 
-def load_stars(keyword):
-    origin = config('isutar_origin')
-    url = "%s/stars" % origin
-    params = urllib.parse.urlencode({'keyword': keyword})
-    with urllib.request.urlopen(url + "?%s" % params) as res:
-        data = json.loads(res.read().decode('utf-8'))
-        return data['stars']
+def load_stars(entry_id):
+    cur = dbh().cursor()
+    cur.execute('SELECT * FROM star WHERE entry_id = %s', (entry_id, ))
+    return cur.fetchall()
+
+    #origin = config('isutar_origin')
+    #url = "%s/stars" % origin
+    #params = urllib.parse.urlencode({'keyword': keyword})
+    #with urllib.request.urlopen(url + "?%s" % params) as res:
+    #    data = json.loads(res.read().decode('utf-8'))
+    #    return data['stars']
 
 def is_spam_contents(content):
     with urllib.request.urlopen(config('isupam_origin'), urllib.parse.urlencode({ "content": content }).encode('utf-8')) as res:
