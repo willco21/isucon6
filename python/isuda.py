@@ -13,6 +13,7 @@ import re
 import string
 import urllib
 import redis
+import pickle
 
 static_folder = pathlib.Path(__file__).resolve().parent.parent / 'public'
 app = Flask(__name__, static_folder = str(static_folder), static_url_path='')
@@ -253,35 +254,19 @@ def delete_keyword(keyword):
 def htmlify(content):
     if content == None or content == '':
         return ''
-
-    #cur = dbh().cursor()
-    #cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
-    #keywords = cur.fetchall()
-    #print(keywords)
-    #keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
-    keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
+    redis_cache = redis_re_keyword.get('re_keyword')
+    redis_cache_decode = redis_cache.decode('utf-8')
+    print(redis_cache_decode)
+    keyword_re = re.compile(redis_cache_decode)
     kw2sha = {}
     def replace_keyword(m):
         kw = m.group(0)
         url = url_for('get_keyword', keyword = kw)
         link = "<a href=\"%s\">%s</a>" % (url, html.escape(kw))
-        #kw2sha[m.group(0)] = "isuda_%s" % hashlib.sha1(m.group(0).encode('utf-8')).hexdigest()
-        #return kw2sha[m.group(0)]
         return link
 
     result = html.escape(content)
     result = re.sub(keyword_re, replace_keyword, result)
-    #print(result)
-    #print(kw2sha)
-    #for kw, hash in kw2sha.items():
-    #    print("kw: " + kw)
-    #    print("hash: " + str(hash))
-    #    url = url_for('get_keyword', keyword = kw)
-    #    link = "<a href=\"%s\">%s</a>" % (url, html.escape(kw))
-    #    result = re.sub(re.compile(hash), link, result)
-
-    #print("=========after-re-result:==============" + result)
-    #print(result)
 
     return re.sub(re.compile("\n"), "<br />", result)
 
@@ -299,6 +284,15 @@ def is_spam_contents(content):
         return not data['valid']
 
     return False
+
+from wsgi_lineprof.middleware import LineProfilerMiddleware
+from wsgi_lineprof.filters import FilenameFilter, TotalTimeSorter
+f=open("/home/isucon/profile.log", "a")
+filters = [
+    FilenameFilter("/home/isucon/webapp/python/isuda.py"),  # プロファイル対象のファイル名指定
+    lambda stats: filter(lambda stat: stat.total_time > 0.01, stats), # 0.01未満の結果を表示しない
+]
+app = LineProfilerMiddleware(app, stream=f, filters=filters)
 
 if __name__ == "__main__":
     app.run()

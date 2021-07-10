@@ -2,3 +2,4 @@ flask
 mysqlclient
 gunicorn
 redis
+wsgi_lineprof
