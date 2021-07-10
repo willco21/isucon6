@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from flask import Flask, request, jsonify, abort, render_template, redirect, session, url_for
 import MySQLdb.cursors
 import hashlib
@@ -10,9 +12,13 @@ import random
 import re
 import string
 import urllib
+import redis
 
 static_folder = pathlib.Path(__file__).resolve().parent.parent / 'public'
 app = Flask(__name__, static_folder = str(static_folder), static_url_path='')
+
+pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
+redis_re_keyword = redis.StrictRedis(connection_pool=pool)
 
 app.secret_key = 'tonymoris'
 
@@ -91,6 +97,18 @@ def get_initialize():
     cur.execute('DELETE FROM entry WHERE id > 7101')
     origin = config('isutar_origin')
     urllib.request.urlopen(origin + '/initialize')
+
+    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    keywords = cur.fetchall()
+    #print(keywords)
+    re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
+    print(re_keyword)
+    redis_re_keyword.set('re_keyword', re_keyword)
+    print(redis_re_keyword.get('re_keyword').decode('utf-8'))
+
+    #redis_re_keyword.set('test', '--------テストです----------------')
+    #print(redis_re_keyword.get('test'))
+
     return jsonify(result = 'ok')
 
 @app.route('/')
@@ -140,6 +158,11 @@ def create_keyword():
         author_id = %s, keyword = %s, description = %s, updated_at = NOW()
 """
     cur.execute(sql, (user_id, keyword, description, user_id, keyword, description))
+
+    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    keywords = cur.fetchall()
+    re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
+    redis_re_keyword.set('re_keyword', re_keyword)
     return redirect('/')
 
 @app.route('/register')
@@ -220,16 +243,26 @@ def delete_keyword(keyword):
 
     cur.execute('DELETE FROM entry WHERE keyword = %s', (keyword,))
 
+    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    keywords = cur.fetchall()
+    re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
+    redis_re_keyword.set('re_keyword', re_keyword)
+
     return redirect('/')
 
 def htmlify(content):
     if content == None or content == '':
         return ''
 
-    cur = dbh().cursor()
-    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
-    keywords = cur.fetchall()
-    keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
+    #cur = dbh().cursor()
+    #cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    #keywords = cur.fetchall()
+    #print(keywords)
+    #keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
+    keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
+    #print('before keyword_re')
+    #print(str(keyword_re))
+    #print('after keyword_re')
     kw2sha = {}
     def replace_keyword(m):
         kw2sha[m.group(0)] = "isuda_%s" % hashlib.sha1(m.group(0).encode('utf-8')).hexdigest()
