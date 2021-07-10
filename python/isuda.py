@@ -98,7 +98,8 @@ def get_initialize():
     origin = config('isutar_origin')
     urllib.request.urlopen(origin + '/initialize')
 
-    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    #cur.execute('SELECT keyword FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    cur.execute('SELECT keyword FROM entry ORDER BY keyword_len')
     keywords = cur.fetchall()
     #print(keywords)
     re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
@@ -120,8 +121,9 @@ def get_index():
     cur = dbh().cursor()
     cur.execute('SELECT * FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
     entries = cur.fetchall()
+    keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
     for entry in entries:
-        entry['html'] = htmlify(entry['description'])
+        entry['html'] = htmlify(entry['description'], keyword_re)
         entry['stars'] = load_stars(entry['id'])
 
     cur.execute('SELECT COUNT(*) AS count FROM entry')
@@ -159,7 +161,8 @@ def create_keyword():
 """
     cur.execute(sql, (user_id, keyword, description, user_id, keyword, description))
 
-    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    #cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    cur.execute('SELECT keyword FROM entry ORDER BY keyword_len')
     keywords = cur.fetchall()
     re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
     redis_re_keyword.set('re_keyword', re_keyword)
@@ -232,7 +235,8 @@ def get_keyword(keyword):
     if entry == None:
         abort(404)
 
-    entry['html'] = htmlify(entry['description'])
+    keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
+    entry['html'] = htmlify(entry['description'], keyword_re)
     entry['stars'] = load_stars(entry['id'])
     return render_template('keyword.html', entry = entry)
 
@@ -251,7 +255,8 @@ def delete_keyword(keyword):
 
     cur.execute('DELETE FROM entry WHERE keyword = %s', (keyword,))
 
-    cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    #cur.execute('SELECT * FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    cur.execute('SELECT keyword FROM entry ORDER BY keyword_len')
     keywords = cur.fetchall()
     re_keyword = "(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords])
     redis_re_keyword.set('re_keyword', re_keyword)
@@ -290,7 +295,7 @@ def post_stars():
     return jsonify(result = 'ok')
 
 
-def htmlify(content):
+def htmlify(content, keyword_re):
     if content == None or content == '':
         return ''
 
@@ -299,7 +304,7 @@ def htmlify(content):
     #keywords = cur.fetchall()
     #print(keywords)
     #keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
-    keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
+    #keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
     kw2sha = {}
     def replace_keyword(m):
         kw = m.group(0)
