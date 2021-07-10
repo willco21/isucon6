@@ -260,20 +260,28 @@ def htmlify(content):
     #print(keywords)
     #keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
     keyword_re = re.compile(redis_re_keyword.get('re_keyword').decode('utf-8'))
-    #print('before keyword_re')
-    #print(str(keyword_re))
-    #print('after keyword_re')
     kw2sha = {}
     def replace_keyword(m):
-        kw2sha[m.group(0)] = "isuda_%s" % hashlib.sha1(m.group(0).encode('utf-8')).hexdigest()
-        return kw2sha[m.group(0)]
-
-    result = re.sub(keyword_re, replace_keyword, content)
-    result = html.escape(result)
-    for kw, hash in kw2sha.items():
+        kw = m.group(0)
         url = url_for('get_keyword', keyword = kw)
         link = "<a href=\"%s\">%s</a>" % (url, html.escape(kw))
-        result = re.sub(re.compile(hash), link, result)
+        #kw2sha[m.group(0)] = "isuda_%s" % hashlib.sha1(m.group(0).encode('utf-8')).hexdigest()
+        #return kw2sha[m.group(0)]
+        return link
+
+    result = html.escape(content)
+    result = re.sub(keyword_re, replace_keyword, result)
+    #print(result)
+    #print(kw2sha)
+    #for kw, hash in kw2sha.items():
+    #    print("kw: " + kw)
+    #    print("hash: " + str(hash))
+    #    url = url_for('get_keyword', keyword = kw)
+    #    link = "<a href=\"%s\">%s</a>" % (url, html.escape(kw))
+    #    result = re.sub(re.compile(hash), link, result)
+
+    #print("=========after-re-result:==============" + result)
+    #print(result)
 
     return re.sub(re.compile("\n"), "<br />", result)
 
